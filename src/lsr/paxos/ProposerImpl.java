@@ -427,7 +427,7 @@ public class ProposerImpl implements Proposer {
 
         // creating retransmitter, which automatically starts
         // sending propose message to all acceptors
-        startTime[instance.getId() % 10000] = System.currentTimeMillis();
+        startTime[instance.getId() % 10000] = System.nanoTime();
         Message message = new Propose(instance);
 
         // Must

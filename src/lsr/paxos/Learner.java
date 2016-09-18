@@ -82,7 +82,7 @@ class Learner {
         ConsensusInstance instance = storage.getLog().getInstance(message.getInstanceId());
         int idd = instance.getId() % 10000;
         int markCount = count[idd]++;
-        ackTime[idd][markCount] = t_start;
+        ackTime[idd][markCount] = t_start - ProposerImpl.getStart(idd);
         // too old instance or already decided
         if (instance == null) {
             if (logger.isLoggable(Level.INFO)) {
@@ -127,7 +127,6 @@ class Learner {
         if (paxos.isLeader()) {
             proposer.stopPropose(instance.getId(), sender);
         }
-
         if (instance.isMajority(ProcessDescriptor.getInstance().numReplicas)) {
           try {
             bw.write(ProposerImpl.getStart(idd) + " " +
@@ -141,7 +140,8 @@ class Learner {
                       processTime[idd][1] + " " +
                       processTime[idd][2] + " " +
                       processTime[idd][3] + " " +
-                      processTime[idd][4]);
+                      processTime[idd][4] + "\n");
+                      bw.flush();
                     } catch (IOException e) {
                       e.printStackTrace();
                     }
