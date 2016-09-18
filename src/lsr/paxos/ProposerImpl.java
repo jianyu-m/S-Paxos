@@ -392,6 +392,9 @@ public class ProposerImpl implements Proposer {
      * @param value - the value to propose
      * @throws InterruptedException 
      */
+
+
+    //mark -- start transfering msg
     public void propose(ClientBatch[] requests, byte[] value) {
         assert paxos.getDispatcher().amIInDispatcher();
         if (state != ProposerState.PREPARED) {
