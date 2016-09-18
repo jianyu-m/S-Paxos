@@ -51,26 +51,27 @@ public class ProposerImpl implements Proposer {
     private ProposerState state;
 
     private ClientBatchManager cliBatchManager;
-
-
-    
+    static long startTime[] = new long[10000];
+    static long getStart(int id) {
+      return startTime[id % 10000];
+    }
 
 
     /**
      * Initializes new instance of <code>Proposer</code>. If the id of current
      * replica is 0 then state is set to <code>ACTIVE</code>. Otherwise
      * <code>INACTIVE</code> state is set.
-     * 
+     *
      * @param paxos - the paxos the acceptor belong to
      * @param network - data associated with the paxos
      * @param failureDetector - used to notify about leader change
      * @param storage - used to send responses
      */
-    public ProposerImpl(Paxos paxos, 
-                        Network network, 
+    public ProposerImpl(Paxos paxos,
+                        Network network,
                         FailureDetector failureDetector,
-                        Storage storage, 
-                        CrashModel crashModel) 
+                        Storage storage,
+                        CrashModel crashModel)
     {
         this.paxos = paxos;
         //        this.network = network;
@@ -82,23 +83,23 @@ public class ProposerImpl implements Proposer {
         // prepare round, since there's nothing to prepare
         this.state = ProposerState.INACTIVE;
 
-        // TODO: Use the new active retransmitter instead of the old passive one. 
+        // TODO: Use the new active retransmitter instead of the old passive one.
         // I didn't change the classes below to avoid breaking them, although the
         // new retransmitter should be a drop-in replacement of the old one.
 //        Retransmitter retransmitter = new Retransmitter(
-//                network, 
-//                ProcessDescriptor.getInstance().numReplicas, 
+//                network,
+//                ProcessDescriptor.getInstance().numReplicas,
 //                paxos.getDispatcher());
-        
+
         if (crashModel == CrashModel.EpochSS) {
             prepareRetransmitter = new EpochPrepareRetransmitter(retransmitter , storage);
         } else {
             prepareRetransmitter = new PrepareRetransmitterImpl(retransmitter);
         }
-        
+
         QueueMonitor.getInstance().registerQueue("pendingProposals", pendingProposals);
     }
-    
+
     public void setClientRequestManager(ClientRequestManager requestManager) {
         this.cliBatchManager = requestManager.getClientBatchManager();
     }
@@ -110,7 +111,7 @@ public class ProposerImpl implements Proposer {
 
     /**
      * Gets the current state of the proposer.
-     * 
+     *
      * @return <code>ACTIVE</code> if the current proposer can propose new
      *         values, <code>INACTIVE</code> otherwise
      */
@@ -122,7 +123,7 @@ public class ProposerImpl implements Proposer {
      * If previous leader is suspected this procedure is executed. We're
      * changing the view (variable indicating order of the leaders in time)
      * accordingly, and we're sending the prepare message.
-     * 
+     *
      */
     public void prepareNextView() {
         assert paxos.getDispatcher().amIInDispatcher();
@@ -147,7 +148,7 @@ public class ProposerImpl implements Proposer {
     }
 
     /**
-     * 
+     *
      * @param message
      * @param sender
      * @throws InterruptedException
@@ -166,7 +167,7 @@ public class ProposerImpl implements Proposer {
                 ", view: " + storage.getView();
 
         logger.warning("Received from " + sender + ": " + message);
-        
+
         // Ignore prepareOK messages if we have finished preparing
         if (state == ProposerState.PREPARED) {
             if (logger.isLoggable(Level.FINE)) {
@@ -207,7 +208,7 @@ public class ProposerImpl implements Proposer {
                     break;
 
                 case KNOWN:
-                    // No decision, but some process already accepted it.                    
+                    // No decision, but some process already accepted it.
                     logger.info("Proposing value from previous view: " + instance);
                     instance.setView(storage.getView());
                     continueProposal(instance);
@@ -219,12 +220,12 @@ public class ProposerImpl implements Proposer {
                     fillWithNoOperation(instance);
             }
         }
-        
+
         synchronized (pendingProposals) {
             acceptNewBatches = true;
             pendingProposals.notify();
         }
-        
+
         paxos.onViewPrepared();
         cliBatchManager.startProposing(storage.getView());
     }
@@ -242,7 +243,7 @@ public class ProposerImpl implements Proposer {
             return;
         }
         //        logger.warning(message.toString());
-                
+
 
         // Update the local log with the data sent by this process
         for (ConsensusInstance ci  : message.getPrepared()) {
@@ -268,7 +269,7 @@ public class ProposerImpl implements Proposer {
 //            }
 //            sb.append(", LocalState: " + localLog);
 //            logger.warning(sb.toString());
-            
+
             if (localLog.getState() == LogEntryState.DECIDED) {
                 // We already know the decision, so ignore it.
                 continue;
@@ -316,20 +317,20 @@ public class ProposerImpl implements Proposer {
 
     private final static int MAX_QUEUED_PROPOSALS = 30;
     private final Deque<Proposal> pendingProposals = new ArrayDeque<Proposal>();
-    /* Condition variable. Ensures that the batcher thread only enqueues new batches if the 
+    /* Condition variable. Ensures that the batcher thread only enqueues new batches if the
      * local process is on the leader role and its view is prepared. Used to prevent batches
-     * from being left forgotten on the pendingProposals queue when the process is not the 
+     * from being left forgotten on the pendingProposals queue when the process is not the
      * leader.
      */
     private boolean acceptNewBatches = false;
 
 //    private final PerformanceLogger pLogger = PerformanceLogger.getLogger("batchqueue");
-    
-    public void enqueueProposal(ClientBatch[] requests, byte[] value) 
-    throws InterruptedException 
+
+    public void enqueueProposal(ClientBatch[] requests, byte[] value)
+    throws InterruptedException
     {
-        // Called from batcher thread        
-        Proposal proposal = new Proposal(requests, value);        
+        // Called from batcher thread
+        Proposal proposal = new Proposal(requests, value);
         if (logger.isLoggable(Level.FINE)) {
             logger.fine("pendingProposals.size() = " + pendingProposals.size() + ", MAX: " + MAX_QUEUED_PROPOSALS);
         }
@@ -344,16 +345,16 @@ public class ProposerImpl implements Proposer {
                 logger.fine("Proposer not active.");
                 return;
             }
-            // Do we have to "wake up" the Protocol thread? Remember flag to do it after releasing the lock 
-            wasEmpty = pendingProposals.isEmpty(); 
-            pendingProposals.addLast(proposal);            
+            // Do we have to "wake up" the Protocol thread? Remember flag to do it after releasing the lock
+            wasEmpty = pendingProposals.isEmpty();
+            pendingProposals.addLast(proposal);
         }
 //        pLogger.log(pendingProposals.size() + "\n");
         // logger.info("wasEmpty: " + wasEmpty);
         if (wasEmpty) {
             logger.info("Scheduling proposal task");
             try {
-                paxos.getDispatcher().submit(proposal);                
+                paxos.getDispatcher().submit(proposal);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -388,9 +389,9 @@ public class ProposerImpl implements Proposer {
      * many active propositions, this proposal will be enqueued until there are
      * available slots. If the proposer is <code>INACTIVE</code>, then message
      * is discarded. Otherwise value is added to list of active proposals.
-     * 
+     *
      * @param value - the value to propose
-     * @throws InterruptedException 
+     * @throws InterruptedException
      */
 
 
@@ -398,7 +399,7 @@ public class ProposerImpl implements Proposer {
     public void propose(ClientBatch[] requests, byte[] value) {
         assert paxos.getDispatcher().amIInDispatcher();
         if (state != ProposerState.PREPARED) {
-            // This can happen if there is a Propose event queued on the Dispatcher when 
+            // This can happen if there is a Propose event queued on the Dispatcher when
             // the view changes.
             logger.warning("Cannot propose in INACTIVE or PREPARING state. Discarding batch");
             return;
@@ -419,15 +420,16 @@ public class ProposerImpl implements Proposer {
         ConsensusInstance instance = storage.getLog().append(storage.getView(), value);
 
         ReplicaStats.getInstance().consensusStart(
-                instance.getId(), 
+                instance.getId(),
                 value.length,
-                requests.length, 
+                requests.length,
                 storage.getWindowUsed());
 
         // creating retransmitter, which automatically starts
         // sending propose message to all acceptors
+        startTime[instance.getId() % 10000] = System.currentTimeMillis();
         Message message = new Propose(instance);
-        
+
         // Must
         BitSet destinations = storage.getAcceptors();
 
@@ -459,7 +461,7 @@ public class ProposerImpl implements Proposer {
         // while preparing.
         if (state == ProposerState.PREPARED) {
             proposeNext();
-        }        
+        }
     }
 
     /**
@@ -467,7 +469,7 @@ public class ProposerImpl implements Proposer {
      * orphaned instances. This method activates retransmission of propose
      * messages for instances, which we already have in our logs (
      * {@link sendNextProposal} and {@link Propose} create a new instance)
-     * 
+     *
      * @param instance instance we want to revoke
      */
     private void continueProposal(ConsensusInstance instance) {
@@ -475,14 +477,14 @@ public class ProposerImpl implements Proposer {
         assert proposeRetransmitters.containsKey(instance.getId()) == false : "Different proposal for the same instance";
 
         // TODO: current implementation causes temporary window size violation.
-        Message m = new Propose(instance);        
+        Message m = new Propose(instance);
 
         BitSet destinations = storage.getAcceptors();
         // Do not send propose message to self.
         destinations.clear(ProcessDescriptor.getInstance().localId);
         // Mark the instance as accepted locally
         instance.getAccepts().set(ProcessDescriptor.getInstance().localId);
-        
+
         RetransmittedMessage msg = retransmitter.startTransmitting(m, destinations);
         proposeRetransmitters.put(instance.getId(), msg);
     }
@@ -506,7 +508,7 @@ public class ProposerImpl implements Proposer {
 
     /**
      * After reception of majority accepts, we suppress propose messages.
-     * 
+     *
      * @param instanceId no. of instance, for which we want to stop
      *            retransmission
      */
@@ -522,7 +524,7 @@ public class ProposerImpl implements Proposer {
     /**
      * If retransmission to some process for certain instance is no longer
      * needed, we should stop it
-     * 
+     *
      * @param instanceId no. of instance, for which we want to stop
      *            retransmission
      * @param destination number of the process in processes PID list
@@ -537,7 +539,7 @@ public class ProposerImpl implements Proposer {
     public ClientBatchManager getClientBatchManager() {
         return cliBatchManager;
     }
-    
-    
+
+
     private final static Logger logger = Logger.getLogger(ProposerImpl.class.getCanonicalName());
 }

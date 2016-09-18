@@ -2,6 +2,13 @@ package lsr.paxos;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 
 import lsr.common.ProcessDescriptor;
 import lsr.paxos.messages.Accept;
@@ -19,9 +26,34 @@ class Learner {
     private final Proposer proposer;
     private final Storage storage;
 
+    static long ackTime[][] = new long[10000][9];
+    static long processTime[][] = new long[10000][9];
+    static int count[]= new int[10000];
+    static String fileName = "/home/jianyu/consensus.spaxos.log";
+    static FileWriter fileWriter;
+    static BufferedWriter bw;
+    static {
+      File file = new File(fileName);
+        if (!file.getParentFile().exists()) {
+            file.getParentFile().mkdirs();
+        }
+        try {
+            file.createNewFile();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        try {
+            fileWriter = new FileWriter(file, true);
+            bw = new BufferedWriter(fileWriter);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     /**
      * Initializes new instance of <code>Learner</code>.
-     * 
+     *
      * @param paxos - the paxos the learner belong to
      * @param proposer - the proposer
      * @param storage - data associated with the paxos
@@ -34,19 +66,23 @@ class Learner {
 
     /**
      * Decides requests from which majority of accepts was received.
-     * 
+     *
      * @param message - received accept message from sender
      * @param sender - the id of replica that send the message
      * @see Accept
      */
     public void onAccept(Accept message, int sender) {
+        long t_start = System.nanoTime();
+
         assert message.getView() == storage.getView() : "Msg.view: " + message.getView() +
                                                         ", view: " + storage.getView();
         assert paxos.getDispatcher().amIInDispatcher() : "Thread should not be here: " +
                                                          Thread.currentThread();
 
         ConsensusInstance instance = storage.getLog().getInstance(message.getInstanceId());
-                
+        int idd = instance.getId() % 10000;
+        int markCount = count[idd]++;
+        ackTime[idd][markCount] = t_start;
         // too old instance or already decided
         if (instance == null) {
             if (logger.isLoggable(Level.INFO)) {
@@ -54,26 +90,26 @@ class Learner {
             }
             return;
         }
-        
+
         if (instance.getState() == LogEntryState.DECIDED) {
             if (logger.isLoggable(Level.FINE)) {
                 logger.fine("Ignoring Accept. Instance already decided: " + message.getInstanceId());
             }
             return;
         }
-        
+
         if (instance.getView() == -1) {
             assert instance.getAccepts().isEmpty() : "First message for instance but accepts not empty: " + instance;
             // This is the first message received for this instance. Set the view.
             instance.setView(message.getView());
-            
+
         } else if (message.getView() > instance.getView()) {
             // Reset the instance, the value and the accepts received
             // during the previous view aren't valid on the new view
             logger.fine("Accept for higher view received. Rcvd: " + message + ", instance: " + instance);
             instance.reset();
             instance.setView(message.getView());
-            
+
         } else {
             // check correctness of received accept
             assert message.getView() == instance.getView();
@@ -93,6 +129,22 @@ class Learner {
         }
 
         if (instance.isMajority(ProcessDescriptor.getInstance().numReplicas)) {
+          try {
+            bw.write(ProposerImpl.getStart(idd) + " " +
+                      ackTime[idd][0] + " " +
+                      ackTime[idd][1] + " " +
+                      ackTime[idd][2] + " " +
+                      ackTime[idd][3] + " " +
+                      ackTime[idd][4] + " " +
+                      (System.nanoTime() - ProposerImpl.getStart(idd)) + " " +
+                      processTime[idd][0] + " " +
+                      processTime[idd][1] + " " +
+                      processTime[idd][2] + " " +
+                      processTime[idd][3] + " " +
+                      processTime[idd][4]);
+                    } catch (IOException e) {
+                      e.printStackTrace();
+                    }
             if (instance.getValue() == null) {
                 if (logger.isLoggable(Level.FINE)) {
                     logger.fine("Majority but no value. Delaying deciding. Instance: " + instance.getId());
@@ -101,6 +153,7 @@ class Learner {
                 paxos.decide(instance.getId());
             }
         }
+        processTime[instance.getId()][markCount] = System.nanoTime() - t_start;
     }
 
     private final static Logger logger = Logger.getLogger(Learner.class.getCanonicalName());

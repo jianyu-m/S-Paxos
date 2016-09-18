@@ -29,7 +29,6 @@ public class MapClient {
             if (i % 100 == 0) {
                 System.out.println("sending " + i + " requests");
             }
-            System.out.println("key "+key+" value "+value);
             MapServiceCommand command = new MapServiceCommand(key, value);
             byte[] response = client.execute(command.toByteArray());
 //            ByteBuffer buffer = ByteBuffer.wrap(response);
