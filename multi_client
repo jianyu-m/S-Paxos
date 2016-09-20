@@ -1,0 +1,8 @@
+#!/bin/bash
+
+k_list=$(seq $1)
+
+for i in $k_list
+do
+./hashmap_client.sh 1000 &
+done

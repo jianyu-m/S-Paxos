@@ -129,19 +129,21 @@ class Learner {
         }
         if (instance.isMajority(ProcessDescriptor.getInstance().numReplicas)) {
           try {
-            bw.write(ProposerImpl.getStart(idd) + " " +
+		if (idd != 0) {
+            	bw.write(ProposerImpl.getStart(idd) + " " +
                       ackTime[idd][0] + " " +
                       ackTime[idd][1] + " " +
                       ackTime[idd][2] + " " +
                       ackTime[idd][3] + " " +
                       ackTime[idd][4] + " " +
                       (System.nanoTime() - ProposerImpl.getStart(idd)) + " " +
-                      processTime[idd][0] + " " +
-                      processTime[idd][1] + " " +
-                      processTime[idd][2] + " " +
-                      processTime[idd][3] + " " +
-                      processTime[idd][4] + "\n");
+                      processTime[idd - 1][0] + " " +
+                      processTime[idd - 1][1] + " " +
+                      processTime[idd - 1][2] + " " +
+                      processTime[idd - 1][3] + " " +
+                      processTime[idd - 1][4] + "\n");
                       bw.flush();
+		}
                     } catch (IOException e) {
                       e.printStackTrace();
                     }
